@@ -1,0 +1,12 @@
+# runtime dependencies (identical to [project.dependencies] in pyproject.toml)
+numpy
+tensorflow>=2.16
+keras>=3.0
+
+# Optional, for testing and development
+# matplotlib
+# jupyterlab
+# ipykernel
+# pytest
+# ruff
+# pyyaml
