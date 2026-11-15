@@ -237,3 +237,29 @@ They need `scipy` and `matplotlib`.
 pip install -e ".[dev]"
 pytest
 ```
+## Citation
+
+If you use NeuralDist in your work, please cite the paper and the repository
+(GitHub also offers "Cite this repository" based on [CITATION.cff](CITATION.cff)):
+
+```bibtex
+@article{schuette2026conditional,
+  title     = {Conditional normalizing flow for gas--surface scattering from thermal to hypersonic velocities},
+  author    = {Sch{\"u}tte, Miklas and Hocker, Stephen and Lipp, Hansj{\"o}rg and Roth, Johannes and Fasoulas, Stefanos and Pfeiffer, Marcel},
+  journal   = {Physics of Fluids},
+  volume    = {38},
+  number    = {9},
+  pages     = {097005},
+  year      = {2026},
+  publisher = {AIP Publishing},
+  doi       = {10.1063/5.0350421}
+}
+
+@software{schuette2026neuraldist,
+  title   = {{NeuralDist}: Machine learning models for learning (un)conditional distribution functions},
+  author  = {Sch{\"u}tte, Miklas},
+  year    = {2026},
+  version = {0.1.0},
+  url     = {https://github.com/schuettem/NeuralDist}
+}
+```

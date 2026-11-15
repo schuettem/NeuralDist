@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software and the paper listed under preferred-citation."
+title: "NeuralDist: Machine learning models for learning (un)conditional distribution functions"
+type: software
+authors:
+  - family-names: "Schütte"
+    given-names: "Miklas"
+    orcid: "https://orcid.org/0009-0003-6081-2553"
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/schuettem/NeuralDist"
+keywords:
+  - normalizing flows
+  - RealNVP
+  - variational autoencoder
+  - gas-surface interaction
+  - scattering kernel
+  - detailed balance
+preferred-citation:
+  type: article
+  title: "Conditional normalizing flow for gas–surface scattering from thermal to hypersonic velocities"
+  authors:
+    - family-names: "Schütte"
+      given-names: "Miklas"
+      orcid: "https://orcid.org/0009-0003-6081-2553"
+    - family-names: "Hocker"
+      given-names: "Stephen"
+      orcid: "https://orcid.org/0000-0003-3432-7928"
+    - family-names: "Lipp"
+      given-names: "Hansjörg"
+      orcid: "https://orcid.org/0000-0002-6289-6952"
+    - family-names: "Roth"
+      given-names: "Johannes"
+      orcid: "https://orcid.org/0000-0002-6080-388X"
+    - family-names: "Fasoulas"
+      given-names: "Stefanos"
+      orcid: "https://orcid.org/0000-0002-4168-2410"
+    - family-names: "Pfeiffer"
+      given-names: "Marcel"
+      orcid: "https://orcid.org/0000-0002-4087-1789"
+  journal: "Physics of Fluids"
+  publisher:
+    name: "AIP Publishing"
+  volume: 38
+  issue: 9
+  start: "097005"
+  year: 2026
+  month: 9
+  doi: "10.1063/5.0350421"
+  url: "https://doi.org/10.1063/5.0350421"
