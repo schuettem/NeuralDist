@@ -53,9 +53,9 @@ class GenerativeModel(keras.Model):
     def _check_cond(self, x, cond):
         x = tf.cast(x, tf.float32)
         if self.conditional and cond is None:
-            raise ValueError(f"{type(self).__name__} ist bedingt: cond muss übergeben werden.")
+            raise ValueError(f"{type(self).__name__} is conditional: 'cond' must be provided.")
         if not self.conditional and cond is not None:
-            raise ValueError(f"{type(self).__name__} ist unbedingt (cond_dim=0): cond nicht erlaubt.")
+            raise ValueError(f"{type(self).__name__} is unconditional (cond_dim=0): 'cond' must not be provided.")
         return x, None if cond is None else tf.cast(cond, tf.float32)
 
     def _update_metrics(self, losses):
@@ -76,21 +76,21 @@ class GenerativeModel(keras.Model):
         return self._update_metrics(self.compute_losses(x, cond, training=False))
 
     def warmup(self) -> None:
-        """Baut alle Gewichte (nötig vor load_weights)."""
+        """Builds all weights (needed before load_weights)."""
         x = tf.zeros((2, self.x_dim))
         cond = tf.zeros((2, self.cond_dim)) if self.conditional else None
         self.compute_losses(x, cond, training=False)
-        self.built = True  # nötig für save_weights/load_weights
+        self.built = True  # necessary for save_weights/load_weights
 
     # --- Helperfunctions for sample() ---
     def _expand_cond(self, n_samples: int, cond):
-        """Gibt (cond_wiederholt | None, lead_shape) zurück."""
+        """returns (cond_repeated | None, lead_shape)."""
         if cond is None:
             if self.conditional:
-                raise ValueError("cond muss übergeben werden.")
+                raise ValueError("'cond' must be provided for conditional models.")
             return None, tf.constant([n_samples], tf.int32), n_samples
         if not self.conditional:
-            raise ValueError("Unbedingtes Modell: cond nicht erlaubt.")
+            raise ValueError("'cond' must not be provided for unconditional models.")
         cond = tf.cast(cond, tf.float32)
         b = tf.shape(cond)[0]
         lead = tf.stack([b, tf.constant(n_samples, tf.int32)])

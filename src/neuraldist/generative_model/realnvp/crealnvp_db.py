@@ -1,13 +1,14 @@
 """
     cRealNVP with additional backward NLL and detailed-balance (DB) loss.
+    Physics-agnostic: works with every DBLoss subclass (SurfaceDBLoss, CollisionDBLoss).
 
-    Data format (dict of dicts, as produced by the reflection data pipeline):
-        data["main"] : v_i, v_r, v_i_bwd, v_r_bwd          -> NLL terms
-        data["db"]   : see DBLoss                           -> DB term (only if db_loss is used)
+    Data format (key names are generic: v_i = condition, v_r = target of the kernel):
+        data["main"] : v_i, v_r, v_i_bwd, v_r_bwd  -> NLL terms
+        data["db"]   : see DBLoss                  -> DB term (only if db_loss is used)
 """
 import tensorflow as tf
 
-from ..losses.db import DBLoss
+from ...losses.db import DBLoss
 from ..registry import register_model
 from .realnvp import cRealNVP
 

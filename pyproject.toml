@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 notebooks = ["matplotlib", "ipykernel", "scipy"]
-dev = ["pytest", "ruff", "pyyaml"]
+dev = ["pytest", "ruff", "pyyaml", "scipy"]
 all = ["neuraldist[notebooks,dev]"]
 
 [tool.setuptools.packages.find]
