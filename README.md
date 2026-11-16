@@ -16,6 +16,9 @@ or **scattering kernels** `K(v_i → v_r)` and **collision kernels** `q(g' | g)`
 | `realnvp` | `RealNVP` | no | yes | affine coupling layers, needs `x_dim >= 2` |
 | `crealnvp` | `cRealNVP` | yes | yes | every coupling network receives the condition |
 | `crealnvp_db` | `cRealNVPDB` | yes | yes | `cRealNVP` + backward NLL + detailed-balance loss |
+| `splineflow` | `SplineFlow` | no | yes | rational-quadratic spline coupling layers (neural spline flow), needs `x_dim >= 2` |
+| `csplineflow` | `cSplineFlow` | yes | yes | every spline network receives the condition |
+| `csplineflow_db` | `cSplineFlowDB` | yes | yes | `cSplineFlow` + backward NLL + detailed-balance loss |
 
 The conditional models are thin subclasses of the unconditional ones: `cond_dim=0` means unconditional.
 
@@ -37,6 +40,7 @@ import numpy as np
 from neuraldist.generative_model.registry import build_model
 import neuraldist.generative_model.vae       # registers "vae" and "cvae"
 import neuraldist.generative_model.realnvp   # registers "realnvp", "crealnvp", and "crealnvp_db"
+import neuraldist.generative_model.splineflow  # registers "splineflow", "csplineflow", and "csplineflow_db"
 from neuraldist.training import fit_model
 ```
 
@@ -71,6 +75,17 @@ cvae = build_model(
 )
 fit_model(cvae, v, T, epochs=150, validation_split=0.2, seed=0)
 cvae.sample(100, cond=temps)                # (3, 100, 3)
+```
+
+**Spline flows.** `splineflow` / `csplineflow` have the same interface as the RealNVP models (`forward`, `inverse`,
+`log_prob`, `sample`). Each coupling layer maps the transformed dimensions with a monotonic rational-quadratic spline
+(`n_bins` bins) on `[-tail_bound, tail_bound]` and is the identity outside, so standardize the data or choose
+`tail_bound` to cover it. A spline coupling layer is much more expressive than an affine one, so fewer layers are
+usually enough:
+
+```python
+flow = build_model("csplineflow", x_dim=3, cond_dim=1, n_coupling=4, n_bins=8, tail_bound=5.0)
+fit_model(flow, v, T, epochs=100)
 ```
 
 **Saving and loading.** Weights are stored with Keras. A new model with the **same architecture** must be built and
@@ -129,7 +144,7 @@ pairs `(z, z')`: they only need `W`, not the true kernel. This makes them physic
 | `losses/collision_db.py` | `CollisionDBLoss` | particle-particle collisions `q(g' \| g)` | relative velocity `g = v1 − v2` | `B(\|g\|) · M_μ(g)` (colliding pairs) |
 
 Both physics classes are subclasses of `DBLoss`, build the DB data (`make_db_data`, `sample_db_points`), evaluate both
-sides of the equation for a model (`db_sides`) and work with the same model (`crealnvp_db`) and `fit_model`.
+sides of the equation for a model (`db_sides`) and work with the same models (`crealnvp_db`, `csplineflow_db`) and `fit_model`.
 `get_config()["loss:db:type"]` is `"surface"` or `"collision"`.
 
 `db_data` is a dict of arrays with these keys (all in the abstract variables the flow works in). The key names stem from
@@ -147,6 +162,9 @@ the gas-surface case but are generic: `v_i` is the condition, `v_r` the target o
 - `fit_model` combines the small MD set and the (usually larger) DB set internally and cycles the smaller one.
   One epoch is one pass over the larger set. When you compare runs with and without DB points, pass the same
   `steps_per_epoch` to both, otherwise the run without DB points gets far fewer optimizer steps.
+- `csplineflow_db` is a drop-in replacement for `crealnvp_db` (same `compile` options, `db_data` and callbacks).
+  Both share the DB training logic in `generative_model/db_mixin.py` (`DetailedBalanceMixin`). For the spline
+  flow, the abstract variables should lie inside `[-tail_bound, tail_bound]`.
 - `symmetric=True` makes the coupling networks see only `|cond|`. Use it only if the kernel really is invariant under
   sign changes of the condition components.
 - A model compiled with a DB loss needs `db_data`, and `db_data` needs a model compiled with a DB loss;
@@ -219,6 +237,9 @@ exchange with internal degrees of freedom in equilibrium).
 | `crealnvp_surface_detailed_balance.ipynb` | gas-surface: learn a 2D Cercignani-Lampis scattering kernel from few MD pairs with and without `SurfaceDBLoss` |
 | `crealnvp_surface_detailed_balance_3d.ipynb` | the same in 3D (two tangential components and the normal component) |
 | `crealnvp_collision_detailed_balance.ipynb` | particle-particle: learn an inelastic collision kernel `q(g' \| g)` (Maxwell molecules, different masses) with `CollisionDBLoss`; lab-frame check and the influence of the rate law |
+| `splineflow_csplineflow_distribution_fitting.ipynb` | the same targets with SplineFlow and cSplineFlow, including the influence of `n_coupling` and `n_bins` |
+| `csplineflow_surface_detailed_balance_3d.ipynb` | the 3D gas-surface kernel with `csplineflow_db` instead of `crealnvp_db` |
+| `csplineflow_collision_detailed_balance.ipynb` | the collision kernel `q(g' \| g)` with `csplineflow_db` instead of `crealnvp_db` |
 
 All notebooks compare against analytically known distributions, so the quality of every fit can be quantified.
 They need `scipy` and `matplotlib`.

@@ -3,6 +3,7 @@ import pytest
 import tensorflow as tf
 
 from neuraldist.generative_model.realnvp import RealNVP, cRealNVP, cRealNVPDB
+from neuraldist.generative_model.splineflow import cSplineFlowDB
 from neuraldist.generative_model.vae import VAE, cVAE
 from neuraldist.losses import (CollisionDBLoss, ConstantWeight, DBLoss, DBWeightScheduler,
                                ExpStepScheduler, LinearRampWeight)
@@ -130,11 +131,13 @@ def test_fit_validation_conditional():
 
 # --- fit_model: DB model ---------------------------------------------------------------------
 
-def db_model():
-    return cRealNVPDB(3, 3, hidden_layers=SMALL, n_coupling=2)
+@pytest.fixture(params=[cRealNVPDB, cSplineFlowDB], ids=["crealnvp_db", "csplineflow_db"])
+def db_model(request):
+    """Factory for a small DB model; every DB test runs for all DB model classes."""
+    return lambda: request.param(3, 3, hidden_layers=SMALL, n_coupling=2)
 
 
-def test_db_model_compile_options():
+def test_db_model_compile_options(db_model):
     model = db_model()
     with pytest.raises(ValueError, match="At least one"):
         model.compile("adam", nll_fwd=False)
@@ -144,7 +147,7 @@ def test_db_model_compile_options():
     assert model.use_db_loss and float(model.db_weight) == pytest.approx(0.2)
 
 
-def test_db_model_fit_with_scheduler():
+def test_db_model_fit_with_scheduler(db_model):
     loss, db = db_data(256)
     loss.epoch_weighting = LinearRampWeight(0.0, 1.0, 2)
     model = db_model()
@@ -156,7 +159,7 @@ def test_db_model_fit_with_scheduler():
     assert np.all(np.array(hist.history["nll_bwd"]) > 0)
 
 
-def test_db_model_validation_without_db_entry():
+def test_db_model_validation_without_db_entry(db_model):
     loss, db = db_data(128)
     x, c = data(32, 3), data(32, 3)
     hist = fit_model(db_model(), x, c, db_data=db, compile_kwargs={"db_loss": loss}, epochs=2,
@@ -168,14 +171,14 @@ def test_db_model_validation_without_db_entry():
 
 @pytest.mark.xfail(raises=KeyError, strict=True,
                    reason="_fit_db_model builds validation batches without v_r_bwd / v_i_bwd")
-def test_db_model_nll_bwd_with_validation_data():
+def test_db_model_nll_bwd_with_validation_data(db_model):
     loss, db = db_data(64)
     x, c = data(16, 3), data(16, 3)
     fit_model(db_model(), x, c, db_data=db, compile_kwargs={"db_loss": loss, "nll_bwd": True},
               x_bwd=-c, cond_bwd=-x, epochs=1, validation_data=(x[:8], c[:8]))
 
 
-def test_db_model_fit_validation():
+def test_db_model_fit_validation(db_model):
     loss, db = db_data(32)
     x, c = data(16, 3), data(16, 3)
     with pytest.raises(ValueError, match="pass cond"):

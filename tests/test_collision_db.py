@@ -72,8 +72,10 @@ def test_frame_roundtrip_and_conservation():
     np.testing.assert_allclose(e_lab, e_split)
 
 
-def test_training_smoke():
+@pytest.mark.parametrize("name", ["crealnvp_db", "csplineflow_db"])
+def test_training_smoke(name):
     import neuraldist.generative_model.realnvp.crealnvp_db  # noqa: F401  registers "crealnvp_db"
+    import neuraldist.generative_model.splineflow.csplineflow_db  # noqa: F401  registers "csplineflow_db"
     from neuraldist.generative_model.registry import build_model
 
     tf.keras.utils.set_random_seed(0)
@@ -81,7 +83,7 @@ def test_training_smoke():
     g = rng.normal(0, np.sqrt(VAR), (200, 3))
     g_post = 0.6 * g + np.sqrt(1 - 0.36) * rng.normal(0, np.sqrt(VAR), g.shape)
     loss = CollisionDBLoss(MU, KT, rate_exponent=0.0)
-    model = build_model("crealnvp_db", x_dim=3, cond_dim=3, n_coupling=4)
+    model = build_model(name, x_dim=3, cond_dim=3, n_coupling=4)
     hist = fit_model(model, g_post, g, db_data=loss.sample_db_points(512, rng=1),
                      compile_kwargs={"db_loss": loss}, epochs=3, batch_size=128)
     assert np.isfinite(hist.history["db_loss"]).all()

@@ -15,7 +15,9 @@ from neuraldist.generative_model.registry import build_model, list_models, regis
 def test_registry_contains_all_models():
     importlib.import_module("neuraldist.generative_model.realnvp")
     importlib.import_module("neuraldist.generative_model.vae")
-    assert {"realnvp", "crealnvp", "crealnvp_db", "vae", "cvae"} <= set(list_models())
+    importlib.import_module("neuraldist.generative_model.splineflow")
+    assert {"realnvp", "crealnvp", "crealnvp_db", "vae", "cvae", "splineflow",
+            "csplineflow", "csplineflow_db"} <= set(list_models())
     model = build_model("realnvp", x_dim=2, n_coupling=2)
     assert type(model).__name__ == "RealNVP" and model.x_dim == 2
 
@@ -35,6 +37,7 @@ def test_registry_unknown_and_custom():
 def test_package_exports():
     """Everything listed in __all__ must be importable."""
     for name in ("neuraldist.generative_model.realnvp", "neuraldist.generative_model.vae",
+                 "neuraldist.generative_model.splineflow",
                  "neuraldist.losses", "neuraldist.training"):
         mod = importlib.import_module(name)
         for attr in mod.__all__:
