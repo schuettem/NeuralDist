@@ -7,6 +7,8 @@ class GenerativeModel(keras.Model):
     """
 
     loss_names : tuple[str, ...] = ("loss",)
+    # True if compute_losses accepts per-point weights (training on pdf values, see fit_model)
+    supports_weights: bool = False
 
     def __init__(self, x_dim: int, cond_dim: int = 0, **kwargs):
         super().__init__(**kwargs)
@@ -50,6 +52,22 @@ class GenerativeModel(keras.Model):
             x, cond = data, None
         return self._check_cond(x, cond)
 
+    def _unpack_weighted(self, data):
+        """Like _unpack, but also accepts the dict format {"x", "cond" (optional), "weight"} used for
+        training on pdf values. Returns (x, cond, weight); weight is None for plain sample batches."""
+        if isinstance(data, dict):
+            x, cond = self._check_cond(data["x"], data.get("cond"))
+            weight = data.get("weight")
+            return x, cond, None if weight is None else tf.cast(weight, tf.float32)
+        return (*self._unpack(data), None)
+
+    def _batch_losses(self, x, cond, weight, training):
+        if weight is None:
+            return self.compute_losses(x, cond, training=training)
+        if not self.supports_weights:
+            raise ValueError(f"{type(self).__name__} does not support weighted training (pdf values).")
+        return self.compute_losses(x, cond, training=training, weight=weight)
+
     def _check_cond(self, x, cond):
         x = tf.cast(x, tf.float32)
         if self.conditional and cond is None:
@@ -64,16 +82,16 @@ class GenerativeModel(keras.Model):
         return {name: t.result() for name, t in self._trackers.items()}
 
     def train_step(self, data):
-        x, cond = self._unpack(data)
+        x, cond, weight = self._unpack_weighted(data)
         with tf.GradientTape() as tape:
-            losses = self.compute_losses(x, cond, training=True)
+            losses = self._batch_losses(x, cond, weight, training=True)
         grads = tape.gradient(losses["loss"], self.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
         return self._update_metrics(losses)
 
     def test_step(self, data):
-        x, cond = self._unpack(data)
-        return self._update_metrics(self.compute_losses(x, cond, training=False))
+        x, cond, weight = self._unpack_weighted(data)
+        return self._update_metrics(self._batch_losses(x, cond, weight, training=False))
 
     def warmup(self) -> None:
         """Builds all weights (needed before load_weights)."""

@@ -6,7 +6,7 @@ from neuraldist.generative_model.realnvp import RealNVP, cRealNVP, cRealNVPDB
 from neuraldist.generative_model.vae import VAE, cVAE
 from neuraldist.losses import (CollisionDBLoss, ConstantWeight, DBLoss, DBWeightScheduler,
                                ExpStepScheduler, LinearRampWeight)
-from neuraldist.training import fit_model
+from neuraldist.training import fit_model, pdf_weights
 from neuraldist.training.training import DB_KEYS, make_dataset, make_db_dataset
 
 SMALL = [{"neurons": 8, "activation": "tanh"}]
@@ -203,3 +203,62 @@ def test_weight_schedules():
     assert loss.initial_weight() == pytest.approx(0.01)
     assert loss.weight_for_epoch(4) == pytest.approx(1.0)
     assert DBLoss(0.7).get_config()["loss:db:weighting:value"] == pytest.approx(0.7)
+
+
+# --- training on pdf values ------------------------------------------------------------------
+
+def test_pdf_weights():
+    w = pdf_weights(pdf=[1.0, 3.0, 0.0, 4.0])
+    np.testing.assert_allclose(w, [0.5, 1.5, 0.0, 2.0])
+    np.testing.assert_allclose(pdf_weights(log_pdf=np.log([1.0, 3.0, 1e-300, 4.0]) + 500.0), w, rtol=1e-6)
+    # importance sampling: w ∝ p / r
+    np.testing.assert_allclose(pdf_weights(pdf=[2.0, 2.0], log_proposal=np.log([1.0, 3.0])), [1.5, 0.5])
+    for kwargs, match in [({}, "exactly one"), (dict(pdf=[1.0], log_pdf=[0.0]), "exactly one"),
+                          (dict(pdf=[-1.0, 1.0]), ">= 0"), (dict(pdf=[0.0, 0.0]), "zero"),
+                          (dict(log_pdf=[np.nan]), "NaN")]:
+        with pytest.raises(ValueError, match=match):
+            pdf_weights(**kwargs)
+
+
+def test_weighted_loss_matches_cross_entropy():
+    model = RealNVP(2, hidden_layers=SMALL, n_coupling=2)
+    x, w = data(32, 2), RNG.uniform(size=32).astype("float32")
+    ref = -np.mean(w * model.log_prob(x).numpy())
+    np.testing.assert_allclose(model.compute_losses(x, weight=w)["loss"], ref, rtol=1e-5)
+    np.testing.assert_allclose(model.compute_losses(x, weight=np.ones(32, "float32"))["loss"],
+                               model.compute_losses(x)["loss"], rtol=1e-6)
+
+
+def test_fit_on_pdf_values_learns_gaussian():
+    # uniform grid on [-5, 5]^2, target N((1, -0.5), diag(0.5², 1.2²)), log_pdf unnormalized
+    g = np.linspace(-5, 5, 60)
+    x = np.stack(np.meshgrid(g, g), -1).reshape(-1, 2).astype("float32")
+    mu, sd = np.array([1.0, -0.5]), np.array([0.5, 1.2])
+    log_p = -0.5 * (((x - mu) / sd) ** 2).sum(1)
+    model = RealNVP(2, hidden_layers=[{"neurons": 32, "activation": "relu"}], n_coupling=4)
+    hist = fit_model(model, x, log_pdf=log_p, epochs=60, batch_size=256, learning_rate=5e-3, seed=0,
+                     validation_split=0.2)
+    s = model.sample(20_000).numpy()
+    np.testing.assert_allclose(s.mean(0), mu, atol=0.1)
+    np.testing.assert_allclose(s.std(0), sd, rtol=0.1)
+    # loss estimates the cross entropy -> close to the entropy of the target
+    entropy = 0.5 * np.log((2 * np.pi * np.e) ** 2 * np.prod(sd ** 2))
+    assert abs(hist.history["loss"][-1] - entropy) < 0.1
+    assert "val_loss" in hist.history
+
+
+def test_fit_on_pdf_values_conditional_and_validation():
+    model = cRealNVP(2, 1, hidden_layers=SMALL, n_coupling=2)
+    x, c = data(64, 2), data(64, 1)
+    hist = fit_model(model, x, c, pdf=np.exp(-0.5 * (x ** 2).sum(1)), epochs=2, batch_size=32,
+                     validation_data=(x[:8], c[:8]))
+    assert np.all(np.isfinite(hist.history["loss"])) and "val_loss" in hist.history
+    with pytest.raises(ValueError, match="one value per point"):
+        fit_model(model, x, c, pdf=np.ones(10), epochs=1)
+    with pytest.raises(ValueError, match="only used together"):
+        fit_model(model, x, c, log_proposal=np.zeros(64), epochs=1)
+    with pytest.raises(ValueError, match="does not support"):
+        fit_model(VAE(2, encoder_hidden_layers=SMALL, decoder_hidden_layers=SMALL), x,
+                  pdf=np.ones(64), epochs=1)
+    with pytest.raises(ValueError, match="does not support"):
+        fit_model(db_model(), data(16, 3), data(16, 3), pdf=np.ones(16), epochs=1)

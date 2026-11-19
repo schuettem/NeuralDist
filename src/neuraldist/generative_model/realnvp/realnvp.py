@@ -138,6 +138,7 @@ class RealNVP(GenerativeModel):
     """
 
     loss_names = ("loss",)
+    supports_weights = True
 
     def __init__(self, x_dim: int, cond_dim: int = 0, hidden_layers: list[dict] = None, n_coupling: int = 6, scale_clamp=1.0,
                  mask_patterns=None, symmetric: bool = False, **kwargs):
@@ -184,8 +185,15 @@ class RealNVP(GenerativeModel):
         z, log_det = self.forward(x, cond)
         return self.prior.log_prob(z) + log_det  # [batch]
 
-    def compute_losses(self, x, cond=None, training=True):
-        return {"loss": -tf.reduce_mean(self.log_prob(x, cond))}
+    def compute_losses(self, x, cond=None, training=True, weight=None):
+        """Negative log-likelihood. Without weight: mean over samples x ~ p.
+        With weight w_i ∝ p(x_i) / r(x_i) (points x_i ~ r, e.g. a grid): the weighted mean
+        mean(w_i * -log q(x_i)), an estimate of the cross entropy H(p, q) = KL(p || q) + H(p)
+        when the weights have mean 1 over the data set (see training.pdf_weights)."""
+        nll = -self.log_prob(x, cond)
+        if weight is None:
+            return {"loss": tf.reduce_mean(nll)}
+        return {"loss": tf.reduce_mean(tf.cast(weight, tf.float32) * nll)}
 
     def sample(self, n_samples, cond=None, z=None):
         """cond: [B, cond_dim] -> [B, n_samples, x_dim]; without cond -> [n_samples, x_dim].

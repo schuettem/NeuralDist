@@ -108,8 +108,29 @@ batches from the model type, checks all shapes, and returns the Keras `History`.
 | `compile_model=False` | keep a model you have already compiled yourself |
 | `compile_kwargs` | extra arguments for `model.compile` (e.g. `nll_bwd`, `db_loss`) |
 | `db_data`, `db_batch_size` | detailed-balance points (see below) |
+| `pdf`, `log_pdf`, `log_proposal` | train on density values instead of samples (see below) |
 
 `x` may also be a ready-made `tf.data.Dataset`.
+
+### Training on pdf values instead of samples
+
+If the target density is known (analytically or as a table), RealNVP and cRealNVP can be trained on its values
+instead of on samples. `x` (and `cond`) are then **evaluation points** (a grid, uniform points in a box, or points from
+a proposal `r`), and `pdf=` / `log_pdf=` holds the target `p(x_i)` or `p(x_i | c_i)` at these points:
+
+```python
+x_grid = ...                                                  # (N, x_dim), e.g. a regular grid
+fit_model(flow, x_grid, log_pdf=log_p(x_grid), epochs=100)    # uniform placement: no log_proposal
+fit_model(flow, x_is, log_pdf=log_p(x_is), log_proposal=log_r(x_is))   # importance sampling x_i ~ r
+fit_model(cflow, v, T, log_pdf=log_p(v, T), log_proposal=log_r(v, T))  # conditional p(v | T)
+```
+
+The loss is the weighted NLL `-mean(w_i log q(x_i))` with weights `w_i ∝ p(x_i) / r(x_i)` normalized to mean 1
+(`neuraldist.training.pdf_weights`). It estimates the cross entropy `H(p, q) = KL(p ‖ q) + H(p)`, so the
+normalization of `p` is not needed. For conditional targets, the constant must not depend on the condition. The points must
+cover the support of `p`, since mass outside the points is not seen by the loss. `validation_split` splits points and
+weights; `validation_data` arrays are evaluated as plain samples. Models declare support with `supports_weights = True`;
+VAEs and `cRealNVPDB` reject `pdf` / `log_pdf`.
 
 ## Detailed balance
 
@@ -216,6 +237,7 @@ exchange with internal degrees of freedom in equilibrium).
 |---|---|
 | `vae_cvae_distribution_fitting.ipynb` | fit a 2D Gaussian mixture and (temperature-dependent) Maxwell velocity distributions with VAE and cVAE; influence of `kl_weight` |
 | `realnvp_crealnvp_distribution_fitting.ipynb` | the same targets with RealNVP and cRealNVP, including exact densities, KL estimates, `n_coupling` and the limits of extrapolation |
+| `realnvp_crealnvp_pdf_fitting.ipynb` | train RealNVP / cRealNVP on pdf values instead of samples: grid, uniform box and importance sampling, samples vs. pdf values, conditional `p(v \| T)`, an unnormalized tabulated density |
 | `crealnvp_surface_detailed_balance.ipynb` | gas-surface: learn a 2D Cercignani-Lampis scattering kernel from few MD pairs with and without `SurfaceDBLoss` |
 | `crealnvp_surface_detailed_balance_3d.ipynb` | the same in 3D (two tangential components and the normal component) |
 | `crealnvp_collision_detailed_balance.ipynb` | particle-particle: learn an inelastic collision kernel `q(g' \| g)` (Maxwell molecules, different masses) with `CollisionDBLoss`; lab-frame check and the influence of the rate law |
@@ -227,7 +249,8 @@ They need `scipy` and `matplotlib`.
 
 1. Subclass `GenerativeModel` and set `loss_names` (it must contain `"loss"`).
 2. Implement `compute_losses(x, cond=None, training=True)` (returns a dict, `"loss"` is optimized) and
-   `sample(n_samples, cond=None)`. Optionally implement `log_prob`.
+   `sample(n_samples, cond=None)`. Optionally implement `log_prob`. For training on pdf values, accept a
+   `weight=None` argument in `compute_losses` and set `supports_weights = True`.
 3. Register it with `@register_model("name")` and import the module where the models are collected.
 
 
